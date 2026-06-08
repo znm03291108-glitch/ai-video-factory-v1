@@ -260,6 +260,20 @@ function formatTime(sec) {
 
 function createVideo({ videoFile, topic, script }) {
   return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input("color=c=0f172a:s=720x1280:r=30:d=18")
+      .inputFormat("lavfi")
+      .outputOptions([
+        "-c:v libx264",
+        "-pix_fmt yuv420p",
+        "-movflags +faststart"
+      ])
+      .save(videoFile)
+      .on("end", () => resolve())
+      .on("error", err => reject(err));
+  });
+}
+  return new Promise((resolve, reject) => {
     const title = cleanDrawText(topic || "AI短视频");
     const line1 = cleanDrawText(script.slice(0, 26));
     const line2 = cleanDrawText(script.slice(26, 52));
