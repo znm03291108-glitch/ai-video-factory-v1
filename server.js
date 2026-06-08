@@ -273,41 +273,7 @@ function createVideo({ videoFile, topic, script }) {
       .on("error", err => reject(err));
   });
 }
-  return new Promise((resolve, reject) => {
-    const title = cleanDrawText(topic || "AI短视频");
-    const line1 = cleanDrawText(script.slice(0, 26));
-    const line2 = cleanDrawText(script.slice(26, 52));
-    const line3 = cleanDrawText(script.slice(52, 78));
-
-    ffmpeg()
-      .input("color=c=0f172a:s=720x1280:r=30:d=18")
-      .inputFormat("lavfi")
-      .outputOptions([
-        "-c:v libx264",
-        "-pix_fmt yuv420p",
-        "-vf",
-        [
-          `drawtext=text='AI短视频工厂':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=160`,
-          `drawtext=text='${title}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=280`,
-          `drawtext=text='${line1}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=560`,
-          `drawtext=text='${line2}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=620`,
-          `drawtext=text='${line3}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=680`,
-          `drawtext=text='自动生成短视频':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=1060`
-        ].join(",")
-      ])
-      .save(videoFile)
-      .on("end", () => resolve())
-      .on("error", err => reject(err));
-  });
-}
-
 function cleanDrawText(text) {
-  return String(text || "")
-    .replace(/[\\/:*?"<>|']/g, "")
-    .replace(/\n/g, " ")
-    .slice(0, 28);
-}
-
 function createDemoResult(topic, style, language, duration, platform) {
   return `
 【当前模式】
