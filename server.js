@@ -6,7 +6,6 @@ const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
-const { EdgeTTS } = require("edge-tts");
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -17,6 +16,7 @@ app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 
 const OUTPUT_DIR = path.join(__dirname, "public", "outputs");
+
 if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
@@ -59,8 +59,8 @@ function getModel() {
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
-    version: "V1.5",
-    message: "AI短视频工厂 V1.5 自动生成视频版正常运行",
+    version: "V1.5.1",
+    message: "AI短视频工厂 V1.5.1 稳定版正常运行",
     provider: AI_PROVIDER,
     model: getModel(),
     hasDeepSeekKey: !!process.env.DEEPSEEK_API_KEY,
@@ -70,7 +70,7 @@ app.get("/health", (req, res) => {
 
 app.post("/api/generate", async (req, res) => {
   try {
-    const { topic, style, language, duration, platform, voice } = req.body;
+    const { topic, style, language, duration, platform } = req.body;
 
     if (!topic || !topic.trim()) {
       return res.status(400).json({
@@ -87,28 +87,22 @@ app.post("/api/generate", async (req, res) => {
       platform
     });
 
-    const cleanScript = extractVoiceScript(scriptText);
-    const subtitleText = createSrtFromText(cleanScript);
+    const voiceScript = extractVoiceScript(scriptText);
+    const srtText = createSrtFromText(voiceScript);
 
     const id = Date.now().toString();
+
     const txtFile = path.join(OUTPUT_DIR, `${id}.txt`);
     const srtFile = path.join(OUTPUT_DIR, `${id}.srt`);
-    const audioFile = path.join(OUTPUT_DIR, `${id}.mp3`);
     const videoFile = path.join(OUTPUT_DIR, `${id}.mp4`);
 
     fs.writeFileSync(txtFile, scriptText, "utf-8");
-    fs.writeFileSync(srtFile, subtitleText, "utf-8");
-
-    await createVoice({
-      text: cleanScript,
-      output: audioFile,
-      voice: voice || "zh-CN-XiaoxiaoNeural"
-    });
+    fs.writeFileSync(srtFile, srtText, "utf-8");
 
     await createVideo({
-      audioFile,
       videoFile,
-      topic
+      topic,
+      script: voiceScript
     });
 
     res.json({
@@ -117,7 +111,6 @@ app.post("/api/generate", async (req, res) => {
       model: getModel(),
       result: scriptText,
       videoUrl: `/outputs/${id}.mp4`,
-      audioUrl: `/outputs/${id}.mp3`,
       txtUrl: `/outputs/${id}.txt`,
       srtUrl: `/outputs/${id}.srt`
     });
@@ -140,9 +133,9 @@ async function generateScript({ topic, style, language, duration, platform }) {
   }
 
   const prompt = `
-你是一个专业短视频编导、爆款文案策划、字幕师和剪辑导演。
+你是一个专业短视频编导、爆款文案策划和剪辑导演。
 
-请根据下面信息生成一条适合短视频平台发布的完整内容。
+请根据下面信息生成短视频内容。
 
 主题：${topic}
 视频风格：${style || "爆款口播"}
@@ -223,10 +216,11 @@ function extractVoiceScript(fullText) {
     .replace(/旁白[:：]/g, "")
     .replace(/素材建议[:：]/g, "")
     .replace(/#\S+/g, "")
+    .replace(/\r/g, "")
     .trim();
 
-  if (text.length > 900) {
-    text = text.slice(0, 900);
+  if (text.length > 500) {
+    text = text.slice(0, 500);
   }
 
   return text || "这是 AI短视频工厂 自动生成的视频内容。";
@@ -244,8 +238,8 @@ function createSrtFromText(text) {
   let start = 0;
 
   sentences.forEach((sentence, index) => {
-    const duration = Math.max(3, Math.min(6, Math.ceil(sentence.length / 6)));
-    const end = start + duration;
+    const dur = Math.max(3, Math.min(6, Math.ceil(sentence.length / 6)));
+    const end = start + dur;
 
     srt += `${index + 1}\n`;
     srt += `${formatTime(start)} --> ${formatTime(end)}\n`;
@@ -264,48 +258,46 @@ function formatTime(sec) {
   return `${h}:${m}:${s},000`;
 }
 
-async function createVoice({ text, output, voice }) {
-  const tts = new EdgeTTS();
-
-  await tts.synthesize(text, voice, {
-    rate: "-5%",
-    volume: "+0%",
-    pitch: "+0Hz"
-  });
-
-  const audioBuffer = tts.toBuffer();
-  fs.writeFileSync(output, audioBuffer);
-}
-
-function createVideo({ audioFile, videoFile, topic }) {
+function createVideo({ videoFile, topic, script }) {
   return new Promise((resolve, reject) => {
-    const safeTitle = String(topic || "AI短视频")
-      .replace(/[\\/:*?"<>|]/g, "")
-      .slice(0, 22);
+    const title = cleanDrawText(topic || "AI短视频");
+    const line1 = cleanDrawText(script.slice(0, 26));
+    const line2 = cleanDrawText(script.slice(26, 52));
+    const line3 = cleanDrawText(script.slice(52, 78));
 
     ffmpeg()
-      .input("color=c=0f172a:s=720x1280:r=30")
+      .input("color=c=0f172a:s=720x1280:r=30:d=18")
       .inputFormat("lavfi")
-      .input(audioFile)
       .outputOptions([
-        "-shortest",
         "-c:v libx264",
         "-pix_fmt yuv420p",
-        "-c:a aac",
-        "-b:a 128k",
         "-vf",
-        `drawtext=text='AI短视频工厂':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=180,drawtext=text='${safeTitle}':fontcolor=white:fontsize=38:x=(w-text_w)/2:y=280,drawtext=text='自动生成视频':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=1040`
+        [
+          `drawtext=text='AI短视频工厂':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=160`,
+          `drawtext=text='${title}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=280`,
+          `drawtext=text='${line1}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=560`,
+          `drawtext=text='${line2}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=620`,
+          `drawtext=text='${line3}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=680`,
+          `drawtext=text='自动生成短视频':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=1060`
+        ].join(",")
       ])
       .save(videoFile)
       .on("end", () => resolve())
-      .on("error", (err) => reject(err));
+      .on("error", err => reject(err));
   });
+}
+
+function cleanDrawText(text) {
+  return String(text || "")
+    .replace(/[\\/:*?"<>|']/g, "")
+    .replace(/\n/g, " ")
+    .slice(0, 28);
 }
 
 function createDemoResult(topic, style, language, duration, platform) {
   return `
 【当前模式】
-Demo 演示模式：当前没有配置可用 AI API Key，但系统会继续生成基础视频。
+Demo 演示模式：当前没有配置可用 AI API Key，但系统会继续生成基础 MP4 视频。
 
 【爆款标题】
 1. ${topic}，普通人现在还能不能做？
@@ -375,5 +367,5 @@ Demo 演示模式：当前没有配置可用 AI API Key，但系统会继续生�
 }
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`AI短视频工厂 V1.5 已启动：http://0.0.0.0:${PORT}`);
+  console.log(`AI短视频工厂 V1.5.1 已启动：http://0.0.0.0:${PORT}`);
 });
