@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI短视频工厂 V1</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      padding: 25px 0;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #38bdf8;
+    }
+
+    .header p {
+      color: #94a3b8;
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 15px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0ea5e9, #22c55e);
+      color: white;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .result {
+      white-space: pre-wrap;
+      line-height: 1.7;
+      background: #020617;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      min-height: 180px;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    .tools {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .tools button {
+      margin-top: 0;
+      background: #1e293b;
+      border: 1px solid #334155;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 5px 10px;
+      background: #1e293b;
+      color: #93c5fd;
+      border-radius: 999px;
+      margin: 5px 4px 0 0;
+      font-size: 12px;
+    }
+
+    .footer {
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+      padding: 20px 0;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 14px;
+      }
+
+      .header h1 {
+        font-size: 23px;
+      }
+
+      .tools {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>AI短视频工厂 V1</h1>
+    <p>输入主题，自动生成标题、脚本、分镜、字幕和发布文案</p>
+    <div>
+      <span class="tag">TikTok</span>
+      <span class="tag">YouTube Shorts</span>
+      <span class="tag">Reels</span>
+      <span class="tag">抖音</span>
+      <span class="tag">快手</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>短视频主题</label>
+    <textarea id="topic" placeholder="例如：比特币今天为什么大跌？ / 吊车安全操作注意事项 / 负债人如何重新开始 / 爆点逃跑小游戏玩法介绍"></textarea>
+
+    <label>视频风格</label>
+    <select id="style">
+      <option value="爆款口播">爆款口播</option>
+      <option value="知识科普">知识科普</option>
+      <option value="故事反转">故事反转</option>
+      <option value="带货推广">带货推广</option>
+      <option value="币圈热点分析">币圈热点分析</option>
+      <option value="工程培训讲解">工程培训讲解</option>
+      <option value="游戏推广">游戏推广</option>
+    </select>
+
+    <label>语言</label>
+    <select id="language">
+      <option value="中文">中文</option>
+      <option value="英文">英文</option>
+      <option value="中英文对照">中英文对照</option>
+    </select>
+
+    <label>视频时长</label>
+    <select id="duration">
+      <option value="30秒">30秒</option>
+      <option value="60秒" selected>60秒</option>
+      <option value="90秒">90秒</option>
+    </select>
+
+    <label>发布平台</label>
+    <select id="platform">
+      <option value="TikTok / YouTube Shorts / Reels / 抖音">通用短视频平台</option>
+      <option value="YouTube Shorts">YouTube Shorts</option>
+      <option value="TikTok">TikTok</option>
+      <option value="抖音">抖音</option>
+      <option value="快手">快手</option>
+      <option value="币安广场">币安广场</option>
+      <option value="X/Twitter">X/Twitter</option>
+    </select>
+
+    <button id="generateBtn" onclick="generateVideoText()">一键生成短视频内容</button>
+  </div>
+
+  <div class="card">
+    <h3>生成结果</h3>
+    <div id="result" class="result">等待生成...</div>
+
+    <div class="tools">
+      <button onclick="copyResult()">复制内容</button>
+      <button onclick="downloadTxt()">下载 TXT</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    AI短视频工厂 V1 简化部署版
+  </div>
+</div>
+
+<script>
+  async function generateVideoText() {
+    const topic = document.getElementById("topic").value.trim();
+    const style = document.getElementById("style").value;
+    const language = document.getElementById("language").value;
+    const duration = document.getElementById("duration").value;
+    const platform = document.getElementById("platform").value;
+    const resultBox = document.getElementById("result");
+    const btn = document.getElementById("generateBtn");
+
+    if (!topic) {
+      alert("请先输入短视频主题");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "正在生成，请稍等...";
+    resultBox.innerText = "AI正在生成短视频标题、脚本、分镜、字幕和发布文案...";
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          topic,
+          style,
+          language,
+          duration,
+          platform
+        })
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        resultBox.innerText = "生成失败：" + data.error;
+      } else {
+        resultBox.innerText = data.result;
+      }
+
+    } catch (err) {
+      resultBox.innerText = "请求失败：" + err.message + "\n\n说明：如果你现在用的是 GitHub Pages 网址，需要改用 Railway 部署后的网址打开。GitHub Pages 不能运行后端接口 /api/generate。";
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "一键生成短视频内容";
+    }
+  }
+
+  function copyResult() {
+    const text = document.getElementById("result").innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      alert("已复制");
+    }).catch(() => {
+      alert("复制失败，请手动长按复制");
+    });
+  }
+
+  function downloadTxt() {
+    const text = document.getElementById("result").innerText;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "AI短视频内容.txt";
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+</script>
+
+</body>
+</html>
