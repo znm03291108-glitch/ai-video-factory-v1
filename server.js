@@ -59,8 +59,8 @@ function getModel() {
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
-    version: "V1.5.1",
-    message: "AI短视频工厂 V1.5.1 稳定版正常运行",
+    version: "V1.5.2",
+    message: "AI短视频工厂 V1.5.2 正常运行",
     provider: AI_PROVIDER,
     model: getModel(),
     hasDeepSeekKey: !!process.env.DEEPSEEK_API_KEY,
@@ -87,8 +87,8 @@ app.post("/api/generate", async (req, res) => {
       platform
     });
 
-    const voiceScript = extractVoiceScript(scriptText);
-    const srtText = createSrtFromText(voiceScript);
+    const shortText = extractVoiceScript(scriptText);
+    const srtText = createSrtFromText(shortText);
 
     const id = Date.now().toString();
 
@@ -99,11 +99,7 @@ app.post("/api/generate", async (req, res) => {
     fs.writeFileSync(txtFile, scriptText, "utf-8");
     fs.writeFileSync(srtFile, srtText, "utf-8");
 
-    await createVideo({
-      videoFile,
-      topic,
-      script: voiceScript
-    });
+    await createVideo(videoFile);
 
     res.json({
       ok: true,
@@ -135,7 +131,7 @@ async function generateScript({ topic, style, language, duration, platform }) {
   const prompt = `
 你是一个专业短视频编导、爆款文案策划和剪辑导演。
 
-请根据下面信息生成短视频内容。
+请根据下面信息生成短视频内容：
 
 主题：${topic}
 视频风格：${style || "爆款口播"}
@@ -154,7 +150,6 @@ async function generateScript({ topic, style, language, duration, platform }) {
 【完整口播脚本】
 只写适合直接朗读的口播内容。
 语言要直接、有节奏、通俗。
-不要太长，适合${duration || "60秒"}视频。
 
 【分镜脚本】
 至少5个镜头。
@@ -189,7 +184,7 @@ async function generateScript({ topic, style, language, duration, platform }) {
     messages: [
       {
         role: "system",
-        content: "你是专业短视频内容工厂助手，擅长生成爆款标题、口播脚本、分镜、字幕和发布文案。"
+        content: "你是专业短视频内容工厂助手。"
       },
       {
         role: "user",
@@ -258,7 +253,7 @@ function formatTime(sec) {
   return `${h}:${m}:${s},000`;
 }
 
-function createVideo({ videoFile, topic, script }) {
+function createVideo(videoFile) {
   return new Promise((resolve, reject) => {
     ffmpeg()
       .input("color=c=0f172a:s=720x1280:r=30:d=18")
@@ -273,7 +268,7 @@ function createVideo({ videoFile, topic, script }) {
       .on("error", err => reject(err));
   });
 }
-function cleanDrawText(text) {
+
 function createDemoResult(topic, style, language, duration, platform) {
   return `
 【当前模式】
@@ -347,5 +342,5 @@ Demo 演示模式：当前没有配置可用 AI API Key，但系统会继续生�
 }
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`AI短视频工厂 V1.5.1 已启动：http://0.0.0.0:${PORT}`);
+  console.log(`AI短视频工厂 V1.5.2 已启动：http://0.0.0.0:${PORT}`);
 });
