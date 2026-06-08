@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AI短视频工厂 V1</title>
+  <title>AI短视频工厂 V1.5</title>
   <style>
     body {
       margin: 0;
@@ -15,24 +15,24 @@
     .container {
       max-width: 900px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
     }
 
     .header {
       text-align: center;
-      padding: 25px 0;
+      padding: 22px 0;
     }
 
     .header h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: 26px;
       color: #38bdf8;
     }
 
     .header p {
       color: #94a3b8;
-      margin-top: 10px;
       line-height: 1.6;
+      margin-top: 10px;
     }
 
     .card {
@@ -51,7 +51,7 @@
       font-size: 14px;
     }
 
-    input, select, textarea {
+    select, textarea {
       width: 100%;
       box-sizing: border-box;
       padding: 12px;
@@ -68,16 +68,20 @@
       resize: vertical;
     }
 
-    button {
+    button, .download {
+      display: block;
       width: 100%;
-      margin-top: 16px;
+      margin-top: 14px;
       padding: 14px;
       border: none;
       border-radius: 12px;
       background: linear-gradient(135deg, #0ea5e9, #22c55e);
       color: white;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: bold;
+      text-align: center;
+      text-decoration: none;
+      box-sizing: border-box;
       cursor: pointer;
     }
 
@@ -96,17 +100,19 @@
       min-height: 180px;
       color: #f8fafc;
       word-break: break-word;
+      max-height: 500px;
+      overflow: auto;
     }
 
-    .tools {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    video {
+      width: 100%;
+      border-radius: 16px;
+      background: #000;
       margin-top: 12px;
+      max-height: 620px;
     }
 
-    .tools button {
-      margin-top: 0;
+    .download.gray {
       background: #1e293b;
       border: 1px solid #334155;
     }
@@ -121,6 +127,13 @@
       font-size: 12px;
     }
 
+    .status {
+      color: #fde68a;
+      font-size: 14px;
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+
     .footer {
       text-align: center;
       color: #64748b;
@@ -130,15 +143,11 @@
 
     @media (max-width: 600px) {
       .container {
-        padding: 14px;
+        padding: 12px;
       }
 
       .header h1 {
-        font-size: 23px;
-      }
-
-      .tools {
-        grid-template-columns: 1fr;
+        font-size: 22px;
       }
     }
   </style>
@@ -147,20 +156,20 @@
 
 <div class="container">
   <div class="header">
-    <h1>AI短视频工厂 V1</h1>
-    <p>输入主题，自动生成标题、脚本、分镜、字幕和发布文案</p>
+    <h1>AI短视频工厂 V1.5</h1>
+    <p>输入主题，自动生成脚本、语音、字幕和竖屏 MP4 视频</p>
     <div>
-      <span class="tag">TikTok</span>
-      <span class="tag">YouTube Shorts</span>
-      <span class="tag">Reels</span>
-      <span class="tag">抖音</span>
-      <span class="tag">快手</span>
+      <span class="tag">AI脚本</span>
+      <span class="tag">AI语音</span>
+      <span class="tag">MP4视频</span>
+      <span class="tag">字幕SRT</span>
+      <span class="tag">手机可用</span>
     </div>
   </div>
 
   <div class="card">
     <label>短视频主题</label>
-    <textarea id="topic" placeholder="例如：比特币今天为什么大跌？ / 吊车安全操作注意事项 / 负债人如何重新开始 / 爆点逃跑小游戏玩法介绍"></textarea>
+    <textarea id="topic" placeholder="例如：比特币为什么大跌？ / 吊车安全操作注意事项 / 负债人如何重新开始 / 爆点逃跑小游戏玩法介绍"></textarea>
 
     <label>视频风格</label>
     <select id="style">
@@ -198,32 +207,47 @@
       <option value="X/Twitter">X/Twitter</option>
     </select>
 
-    <button id="generateBtn" onclick="generateVideoText()">一键生成短视频内容</button>
+    <label>AI旁白声音</label>
+    <select id="voice">
+      <option value="zh-CN-XiaoxiaoNeural">中文女声 Xiaoxiao</option>
+      <option value="zh-CN-YunxiNeural">中文男声 Yunxi</option>
+      <option value="zh-CN-YunjianNeural">中文男声 Yunjian</option>
+      <option value="en-US-JennyNeural">英文女声 Jenny</option>
+      <option value="en-US-GuyNeural">英文男声 Guy</option>
+    </select>
+
+    <button id="generateBtn" onclick="generateVideo()">一键生成 MP4 视频</button>
+    <div id="status" class="status"></div>
   </div>
 
   <div class="card">
-    <h3>生成结果</h3>
-    <div id="result" class="result">等待生成...</div>
+    <h3>生成视频</h3>
+    <div id="videoBox">等待生成...</div>
+  </div>
 
-    <div class="tools">
-      <button onclick="copyResult()">复制内容</button>
-      <button onclick="downloadTxt()">下载 TXT</button>
-    </div>
+  <div class="card">
+    <h3>生成文案</h3>
+    <div id="result" class="result">等待生成...</div>
+    <button onclick="copyResult()">复制文案</button>
   </div>
 
   <div class="footer">
-    AI短视频工厂 V1 简化部署版
+    AI短视频工厂 V1.5 自动生成视频版
   </div>
 </div>
 
 <script>
-  async function generateVideoText() {
+  async function generateVideo() {
     const topic = document.getElementById("topic").value.trim();
     const style = document.getElementById("style").value;
     const language = document.getElementById("language").value;
     const duration = document.getElementById("duration").value;
     const platform = document.getElementById("platform").value;
+    const voice = document.getElementById("voice").value;
+
     const resultBox = document.getElementById("result");
+    const videoBox = document.getElementById("videoBox");
+    const status = document.getElementById("status");
     const btn = document.getElementById("generateBtn");
 
     if (!topic) {
@@ -232,8 +256,10 @@
     }
 
     btn.disabled = true;
-    btn.innerText = "正在生成，请稍等...";
-    resultBox.innerText = "AI正在生成短视频标题、脚本、分镜、字幕和发布文案...";
+    btn.innerText = "正在生成视频，请等待...";
+    status.innerText = "正在生成脚本、语音和 MP4 视频，可能需要 30 秒到 2 分钟，请不要重复点击。";
+    resultBox.innerText = "正在生成文案...";
+    videoBox.innerHTML = "正在生成视频...";
 
     try {
       const res = await fetch("/api/generate", {
@@ -246,7 +272,8 @@
           style,
           language,
           duration,
-          platform
+          platform,
+          voice
         })
       });
 
@@ -254,15 +281,29 @@
 
       if (!data.ok) {
         resultBox.innerText = "生成失败：" + data.error;
-      } else {
-        resultBox.innerText = data.result;
+        videoBox.innerHTML = "视频生成失败";
+        return;
       }
 
+      resultBox.innerText = data.result;
+
+      videoBox.innerHTML = `
+        <video controls src="${data.videoUrl}"></video>
+        <a class="download" href="${data.videoUrl}" download="AI短视频.mp4">下载 MP4 视频</a>
+        <a class="download gray" href="${data.audioUrl}" download="AI旁白.mp3">下载 MP3 语音</a>
+        <a class="download gray" href="${data.srtUrl}" download="AI字幕.srt">下载 SRT 字幕</a>
+        <a class="download gray" href="${data.txtUrl}" download="AI短视频文案.txt">下载 TXT 文案</a>
+      `;
+
+      status.innerText = "生成完成，可以播放或下载 MP4 视频。";
+
     } catch (err) {
-      resultBox.innerText = "请求失败：" + err.message + "\n\n说明：如果你现在用的是 GitHub Pages 网址，需要改用 Railway 部署后的网址打开。GitHub Pages 不能运行后端接口 /api/generate。";
+      resultBox.innerText = "请求失败：" + err.message;
+      videoBox.innerHTML = "请求失败";
+      status.innerText = "请求失败，请检查 Railway 是否部署成功。";
     } finally {
       btn.disabled = false;
-      btn.innerText = "一键生成短视频内容";
+      btn.innerText = "一键生成 MP4 视频";
     }
   }
 
@@ -273,19 +314,6 @@
     }).catch(() => {
       alert("复制失败，请手动长按复制");
     });
-  }
-
-  function downloadTxt() {
-    const text = document.getElementById("result").innerText;
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "AI短视频内容.txt";
-    a.click();
-
-    URL.revokeObjectURL(url);
   }
 </script>
 
