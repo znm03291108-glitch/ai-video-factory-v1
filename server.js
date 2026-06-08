@@ -4,13 +4,17 @@ const express = require("express");
 const OpenAI = require("openai");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static("public"));
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    message: "AI短视频工厂 V1 正常运行",
+    hasOpenAIKey: !!process.env.OPENAI_API_KEY
+  });
 });
 
 app.post("/api/generate", async (req, res) => {
@@ -24,16 +28,23 @@ app.post("/api/generate", async (req, res) => {
       });
     }
 
+    // 没有 OPENAI_API_KEY 时，自动进入 Demo 模式，不再崩溃
     if (!process.env.OPENAI_API_KEY) {
       return res.json({
         ok: true,
         demo: true,
-        result: createDemoResult(topic)
+        result: createDemoResult(topic, style, language, duration, platform)
       });
     }
 
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+
     const prompt = `
 你是一个专业短视频编导和爆款文案策划。
+
+请根据下面信息生成一条适合短视频平台发布的内容。
 
 主题：${topic}
 风格：${style || "爆款口播"}
@@ -68,14 +79,14 @@ app.post("/api/generate", async (req, res) => {
 给出3个封面大字标题。
 
 要求：
-1. 内容通俗、直接、有吸引力。
+1. 内容要通俗、直接、有吸引力。
 2. 不要空话。
 3. 不要违法、虚假承诺、夸大收益。
-4. 如果是币圈或金融内容，加入风险提示。
+4. 如果是币圈或金融内容，要加入风险提示。
 `;
 
     const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [
         {
           role: "system",
@@ -97,7 +108,8 @@ app.post("/api/generate", async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("生成失败：", error);
+
     res.status(500).json({
       ok: false,
       error: error.message || "服务器错误"
@@ -105,14 +117,17 @@ app.post("/api/generate", async (req, res) => {
   }
 });
 
-function createDemoResult(topic) {
+function createDemoResult(topic, style, language, duration, platform) {
   return `
+【当前模式】
+Demo 演示模式：当前没有配置 OPENAI_API_KEY，所以系统不会消耗 OpenAI 额度。
+
 【爆款标题】
 1. ${topic}，普通人现在还能不能做？
 2. 别再盲目跟风了，${topic}真正的关键在这里
-3. 3分钟看懂${topic}的底层逻辑
-4. 新手做${topic}，一定要避开这几个坑
-5. ${topic}最重要的第一步
+3. 新手做${topic}，一定要先看这几点
+4. ${topic}为什么突然被很多人关注？
+5. 3分钟看懂${topic}的底层逻辑
 
 【视频开头3秒钩子】
 很多人做${topic}，一开始方向就错了。
@@ -132,17 +147,17 @@ function createDemoResult(topic) {
 
 【分镜脚本】
 镜头1：
-画面内容：快速切换热门短视频、手机操作、数据增长画面。
+画面内容：手机界面、热门短视频、数据增长画面快速切换。
 字幕：很多人一开始方向就错了
 旁白：很多人做${topic}，一开始方向就错了。
 
 镜头2：
-画面内容：手机页面输入主题，AI自动生成内容。
+画面内容：手机输入主题，系统自动生成脚本和文案。
 字幕：先做最小可用版本
 旁白：真正正确的方式，是先做一个能跑通的简单版本。
 
 镜头3：
-画面内容：短视频发布页面、数据反馈、内容列表。
+画面内容：短视频发布页面、评论区、数据反馈。
 字幕：跑通闭环，再放大
 旁白：先验证，再优化，最后才是批量放大。
 
@@ -166,6 +181,6 @@ function createDemoResult(topic) {
 `;
 }
 
-app.listen(PORT, () => {
-  console.log(`AI短视频工厂 V1 已启动：http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`AI短视频工厂 V1 已启动：http://0.0.0.0:${PORT}`);
 });
