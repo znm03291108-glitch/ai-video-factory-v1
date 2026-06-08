@@ -28,14 +28,12 @@ app.post("/api/generate", async (req, res) => {
       return res.json({
         ok: true,
         demo: true,
-        result: createDemoResult(topic, style, language, duration, platform)
+        result: createDemoResult(topic)
       });
     }
 
     const prompt = `
 你是一个专业短视频编导和爆款文案策划。
-
-请根据下面信息生成一条适合短视频平台发布的内容。
 
 主题：${topic}
 风格：${style || "爆款口播"}
@@ -70,10 +68,10 @@ app.post("/api/generate", async (req, res) => {
 给出3个封面大字标题。
 
 要求：
-1. 内容要通俗、直接、有吸引力。
+1. 内容通俗、直接、有吸引力。
 2. 不要空话。
-3. 不要使用违法、虚假承诺、夸大收益内容。
-4. 如果是币圈或金融内容，要加入风险提示。
+3. 不要违法、虚假承诺、夸大收益。
+4. 如果是币圈或金融内容，加入风险提示。
 `;
 
     const completion = await client.chat.completions.create({
@@ -107,14 +105,14 @@ app.post("/api/generate", async (req, res) => {
   }
 });
 
-function createDemoResult(topic, style, language, duration, platform) {
+function createDemoResult(topic) {
   return `
 【爆款标题】
 1. ${topic}，普通人现在还能不能做？
 2. 别再盲目跟风了，${topic}真正的关键在这里
-3. 你以为${topic}很难，其实第一步最重要
-4. 3分钟看懂${topic}的底层逻辑
-5. 新手做${topic}，一定要避开这几个坑
+3. 3分钟看懂${topic}的底层逻辑
+4. 新手做${topic}，一定要避开这几个坑
+5. ${topic}最重要的第一步
 
 【视频开头3秒钩子】
 很多人做${topic}，一开始方向就错了。
