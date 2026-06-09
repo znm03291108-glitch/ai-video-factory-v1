@@ -1,7 +1,7 @@
 {
-  "name": "ai-video-factory-v16",
-  "version": "1.6.0",
-  "description": "AI短视频工厂 V1.6 真字幕画面版",
+  "name": "ai-video-factory-v17-tts",
+  "version": "1.7.0",
+  "description": "AI短视频工厂 V1.7 AI配音版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
