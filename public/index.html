@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI短视频工厂 V1.6</title>
+  <title>AI短视频工厂 V1.7</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -74,9 +72,7 @@
       margin: 12px 0 6px;
     }
 
-    textarea,
-    select,
-    input {
+    textarea, select, input {
       width: 100%;
       border: 1px solid #263a5a;
       background: #050b18;
@@ -129,7 +125,7 @@
       margin-top: 14px;
     }
 
-    canvas {
+    canvas, video {
       width: 100%;
       max-width: 390px;
       aspect-ratio: 9 / 16;
@@ -138,13 +134,9 @@
       border: 1px solid #233758;
     }
 
-    video {
+    audio {
       width: 100%;
-      max-width: 390px;
-      aspect-ratio: 9 / 16;
-      border-radius: 14px;
-      background: #000;
-      border: 1px solid #233758;
+      margin-top: 12px;
     }
 
     .scriptBox {
@@ -173,30 +165,22 @@
     }
 
     @media (max-width: 560px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
-
-      .app {
-        padding: 12px;
-      }
-
-      .header h1 {
-        font-size: 22px;
-      }
+      .grid { grid-template-columns: 1fr; }
+      .app { padding: 12px; }
+      .header h1 { font-size: 22px; }
     }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="header">
-      <h1>AI短视频工厂 V1.6</h1>
-      <p>真字幕画面版：AI文案 + 动态画面 + 字幕 MP4</p>
+      <h1>AI短视频工厂 V1.7</h1>
+      <p>AI配音版：AI文案 + 字幕画面 + 中文配音 + 视频下载</p>
       <div class="tags">
         <span class="tag">Gemini文案</span>
-        <span class="tag">真字幕画面</span>
-        <span class="tag">手机可用</span>
-        <span class="tag">MP4下载</span>
+        <span class="tag">AI配音</span>
+        <span class="tag">字幕视频</span>
+        <span class="tag">手机下载</span>
       </div>
     </div>
 
@@ -231,8 +215,8 @@
         <div>
           <label>语言</label>
           <select id="language">
-            <option>中文</option>
-            <option>英文</option>
+            <option value="zh">中文</option>
+            <option value="en">英文</option>
           </select>
         </div>
 
@@ -250,13 +234,13 @@
         </div>
       </div>
 
-      <button id="generateBtn" onclick="generateAll()">一键生成字幕视频</button>
+      <button id="generateBtn" onclick="generateAll()">一键生成 AI 配音视频</button>
       <div id="status" class="status">先输入主题，然后点击生成。</div>
     </div>
 
     <div class="card">
       <h2>生成视频</h2>
-      <p class="small">V1.6 已经不是空白视频：会把字幕真实画到视频画面里。</p>
+      <p class="small">V1.7 会生成配音，并把配音和字幕画面一起录制成视频。</p>
 
       <div class="videoWrap">
         <canvas id="canvas" width="720" height="1280"></canvas>
@@ -266,7 +250,10 @@
         <video id="resultVideo" controls playsinline></video>
       </div>
 
-      <button id="downloadMp4" onclick="downloadVideo()" disabled>下载 MP4 视频</button>
+      <audio id="audioPlayer" controls style="display:none;"></audio>
+
+      <button id="downloadVideoBtn" onclick="downloadVideo()" disabled>下载视频</button>
+      <button id="downloadAudioBtn" class="secondary" onclick="downloadAudio()" disabled>下载 MP3 语音</button>
       <button class="secondary" onclick="downloadTxt()">下载 TXT 文案</button>
     </div>
 
@@ -285,8 +272,9 @@
   let latestTitle = "";
   let latestHook = "";
   let latestSubtitles = [];
-  let latestBlob = null;
-  let animationTimer = null;
+  let latestVideoBlob = null;
+  let latestAudioBlob = null;
+  let latestAudioBuffers = [];
 
   function setStatus(msg) {
     document.getElementById("status").innerText = msg;
@@ -364,7 +352,7 @@
 
     ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.font = "bold 26px Arial";
-    ctx.fillText("AI VIDEO FACTORY V1.6", 42, 70);
+    ctx.fillText("AI VIDEO FACTORY V1.7", 42, 70);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 44px Arial";
@@ -416,8 +404,8 @@
   function previewLoop() {
     let start = performance.now();
     function loop(now) {
-      drawFrame(now - start, latestSubtitles.length ? latestSubtitles : ["输入主题后生成字幕视频"], 18);
-      animationTimer = requestAnimationFrame(loop);
+      drawFrame(now - start, latestSubtitles.length ? latestSubtitles : ["输入主题后生成 AI 配音视频"], 18);
+      requestAnimationFrame(loop);
     }
     loop(start);
   }
@@ -431,32 +419,114 @@
 
     const res = await fetch("/api/generate-script", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topic, style, language, duration, platform })
     });
 
+    if (!res.ok) throw new Error("文案生成失败");
+    return await res.json();
+  }
+
+  async function generateTTS(text) {
+    const lang = document.getElementById("language").value;
+
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, lang })
+    });
+
     if (!res.ok) {
-      throw new Error("文案生成失败");
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || "配音生成失败");
     }
 
     return await res.json();
   }
 
-  async function recordCanvasVideo(subtitles, seconds) {
-    latestBlob = null;
-    document.getElementById("downloadMp4").disabled = true;
+  function base64ToArrayBuffer(base64) {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  async function decodeAudioChunks(ttsData, audioCtx) {
+    latestAudioBuffers = [];
+    const mp3Parts = [];
+
+    for (const item of ttsData.chunks) {
+      const ab = base64ToArrayBuffer(item.base64);
+      mp3Parts.push(new Uint8Array(ab));
+      const copy = ab.slice(0);
+      const decoded = await audioCtx.decodeAudioData(copy);
+      latestAudioBuffers.push(decoded);
+    }
+
+    const totalLength = mp3Parts.reduce((sum, p) => sum + p.length, 0);
+    const merged = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const p of mp3Parts) {
+      merged.set(p, offset);
+      offset += p.length;
+    }
+
+    latestAudioBlob = new Blob([merged], { type: "audio/mpeg" });
+    const audioUrl = URL.createObjectURL(latestAudioBlob);
+
+    const player = document.getElementById("audioPlayer");
+    player.src = audioUrl;
+    player.style.display = "block";
+    document.getElementById("downloadAudioBtn").disabled = false;
+  }
+
+  function getTotalAudioDuration(buffers) {
+    return buffers.reduce((sum, b) => sum + b.duration, 0);
+  }
+
+  async function recordVideoWithAudio(subtitles, targetSeconds) {
+    latestVideoBlob = null;
+    document.getElementById("downloadVideoBtn").disabled = true;
     document.getElementById("videoBox").style.display = "none";
 
-    const stream = canvas.captureStream(30);
-    let mimeType = "video/webm;codecs=vp9";
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await audioCtx.resume();
 
+    const ttsText = latestScript || latestHook || latestTitle;
+    setStatus("正在生成 AI 配音...");
+    const ttsData = await generateTTS(ttsText);
+
+    setStatus("正在解码配音...");
+    await decodeAudioChunks(ttsData, audioCtx);
+
+    const audioDuration = getTotalAudioDuration(latestAudioBuffers);
+    const finalSeconds = Math.max(Number(targetSeconds || 18), Math.ceil(audioDuration) + 1);
+
+    const dest = audioCtx.createMediaStreamDestination();
+
+    let startTime = audioCtx.currentTime + 0.3;
+    for (const buffer of latestAudioBuffers) {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(dest);
+      source.connect(audioCtx.destination);
+      source.start(startTime);
+      startTime += buffer.duration + 0.1;
+    }
+
+    const canvasStream = canvas.captureStream(30);
+    const mixedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    let mimeType = "video/webm;codecs=vp9,opus";
     if (!MediaRecorder.isTypeSupported(mimeType)) {
       mimeType = "video/webm";
     }
 
-    const recorder = new MediaRecorder(stream, { mimeType });
+    const recorder = new MediaRecorder(mixedStream, { mimeType });
     const chunks = [];
 
     recorder.ondataavailable = e => {
@@ -467,28 +537,28 @@
 
     return new Promise(resolve => {
       recorder.onstop = () => {
-        latestBlob = new Blob(chunks, { type: "video/webm" });
-        const url = URL.createObjectURL(latestBlob);
+        latestVideoBlob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(latestVideoBlob);
 
         const video = document.getElementById("resultVideo");
         video.src = url;
         document.getElementById("videoBox").style.display = "flex";
-        document.getElementById("downloadMp4").disabled = false;
+        document.getElementById("downloadVideoBtn").disabled = false;
 
-        resolve(latestBlob);
+        resolve(latestVideoBlob);
       };
 
       recorder.start();
 
       function render(now) {
         const elapsed = now - start;
-        drawFrame(elapsed, subtitles, seconds);
+        drawFrame(elapsed, subtitles, finalSeconds);
 
-        if (elapsed < seconds * 1000) {
+        if (elapsed < finalSeconds * 1000) {
           requestAnimationFrame(render);
         } else {
-          drawFrame(seconds * 1000, subtitles, seconds);
-          setTimeout(() => recorder.stop(), 300);
+          drawFrame(finalSeconds * 1000, subtitles, finalSeconds);
+          setTimeout(() => recorder.stop(), 500);
         }
       }
 
@@ -500,8 +570,8 @@
     try {
       const btn = document.getElementById("generateBtn");
       btn.disabled = true;
-      setStatus("正在调用 Gemini 生成文案...");
 
+      setStatus("正在调用 Gemini 生成文案...");
       const data = await generateScript();
 
       latestTitle = data.title || "AI短视频";
@@ -526,10 +596,10 @@
 
       const seconds = Number(document.getElementById("duration").value || 18);
 
-      setStatus("正在生成真字幕画面视频，请等待，不要关闭页面...");
-      await recordCanvasVideo(latestSubtitles, seconds);
+      setStatus("正在生成 AI 配音视频，请等待，不要关闭页面...");
+      await recordVideoWithAudio(latestSubtitles, seconds);
 
-      setStatus("生成成功：视频已经有字幕画面。当前 V1.6 暂不含配音，V1.7 可继续升级加声音。");
+      setStatus("生成成功：已生成带配音的字幕视频。手机浏览器下载格式通常为 WebM。");
     } catch (err) {
       console.error(err);
       setStatus("生成失败：" + err.message);
@@ -539,15 +609,30 @@
   }
 
   function downloadVideo() {
-    if (!latestBlob) {
+    if (!latestVideoBlob) {
       alert("请先生成视频");
       return;
     }
 
     const a = document.createElement("a");
-    const url = URL.createObjectURL(latestBlob);
+    const url = URL.createObjectURL(latestVideoBlob);
     a.href = url;
-    a.download = "AI短视频工厂V1.6_字幕视频.webm";
+    a.download = "AI短视频工厂V1.7_配音字幕视频.webm";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function downloadAudio() {
+    if (!latestAudioBlob) {
+      alert("请先生成配音");
+      return;
+    }
+
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(latestAudioBlob);
+    a.href = url;
+    a.download = "AI短视频工厂V1.7_配音.mp3";
     document.body.appendChild(a);
     a.click();
     a.remove();
