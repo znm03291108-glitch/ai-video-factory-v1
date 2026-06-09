@@ -1,346 +1,166 @@
-require("dotenv").config();
-
 const express = require("express");
-const OpenAI = require("openai");
-const fs = require("fs");
+const cors = require("cors");
 const path = require("path");
-const ffmpeg = require("fluent-ffmpeg");
-const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
-
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "5mb" }));
-app.use(express.static("public"));
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
-const OUTPUT_DIR = path.join(__dirname, "public", "outputs");
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-if (!fs.existsSync(OUTPUT_DIR)) {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+function fallbackScript(topic, style, duration) {
+  return {
+    title: `${topic}，普通人一定要看懂`,
+    hook: `很多人看到${topic}，第一反应就是跟风，但真正关键的点不是涨跌，而是逻辑。`,
+    script:
+      `今天讲一个非常现实的话题：${topic}。\n\n` +
+      `很多人一看到市场波动，就马上冲进去，结果往往不是赚钱，而是被情绪带着走。\n\n` +
+      `第一，要先看原因。是消息面影响，还是资金面变化，还是市场情绪集中释放。\n\n` +
+      `第二，要看位置。价格已经涨了很多再追，风险就会变大；价格已经跌了很多再恐慌，也容易卖在低点。\n\n` +
+      `第三，要看自己的资金。短线可以观察机会，但千万不要满仓，不要借钱，不要把希望全部压在一次判断上。\n\n` +
+      `真正能长期活下来的人，不是每次都猜对方向的人，而是每次都知道自己最多能亏多少的人。\n\n` +
+      `所以面对${topic}，不要只问能不能涨，要先问自己：如果判断错了，我能不能承受。`,
+    subtitles: [
+      `今天讲一个现实话题：${topic}`,
+      `很多人一看到波动就冲进去`,
+      `但真正关键不是涨跌，而是逻辑`,
+      `第一，看消息面和资金面`,
+      `第二，看价格所在的位置`,
+      `第三，看自己的资金承受能力`,
+      `不要满仓，不要借钱，不要情绪化操作`,
+      `长期活下来，比一次猜对更重要`
+    ]
+  };
 }
 
-const AI_PROVIDER = (process.env.AI_PROVIDER || "demo").toLowerCase();
+function splitToSubtitles(text) {
+  const clean = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[【】#*]/g, "")
+    .split(/\n|。|！|？|；|;/)
+    .map(s => s.trim())
+    .filter(Boolean);
 
-function getAIClient() {
-  if (AI_PROVIDER === "deepseek") {
-    if (!process.env.DEEPSEEK_API_KEY) return null;
-
-    return new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: "https://api.deepseek.com"
-    });
+  const result = [];
+  for (const line of clean) {
+    if (line.length <= 24) {
+      result.push(line);
+    } else {
+      for (let i = 0; i < line.length; i += 22) {
+        result.push(line.slice(i, i + 22));
+      }
+    }
   }
-
-  if (AI_PROVIDER === "openai") {
-    if (!process.env.OPENAI_API_KEY) return null;
-
-    return new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
-  }
-
-  return null;
+  return result.slice(0, 18);
 }
 
-function getModel() {
-  if (AI_PROVIDER === "deepseek") {
-    return process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  }
-
-  if (AI_PROVIDER === "openai") {
-    return process.env.OPENAI_MODEL || "gpt-4o";
-  }
-
-  return "demo";
-}
-
-app.get("/health", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
-    version: "V1.5.2",
-    message: "AI短视频工厂 V1.5.2 正常运行",
-    provider: AI_PROVIDER,
-    model: getModel(),
-    hasDeepSeekKey: !!process.env.DEEPSEEK_API_KEY,
-    hasOpenAIKey: !!process.env.OPENAI_API_KEY
+    version: "1.6.0",
+    hasGoogleKey: Boolean(GOOGLE_API_KEY),
+    model: GEMINI_MODEL
   });
 });
 
-app.post("/api/generate", async (req, res) => {
+app.post("/api/generate-script", async (req, res) => {
   try {
-    const { topic, style, language, duration, platform } = req.body;
+    const { topic, style, language, duration, platform } = req.body || {};
 
-    if (!topic || !topic.trim()) {
-      return res.status(400).json({
-        ok: false,
-        error: "请输入短视频主题"
+    if (!topic || !String(topic).trim()) {
+      return res.status(400).json({ error: "请输入短视频主题" });
+    }
+
+    if (!GOOGLE_API_KEY) {
+      const data = fallbackScript(topic, style, duration);
+      return res.json({
+        mode: "fallback",
+        message: "未配置 GOOGLE_API_KEY，已使用本地演示文案。",
+        ...data
       });
     }
 
-    const scriptText = await generateScript({
-      topic,
-      style,
-      language,
-      duration,
-      platform
-    });
+    const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-    const shortText = extractVoiceScript(scriptText);
-    const srtText = createSrtFromText(shortText);
+    const prompt = `
+你是一个短视频爆款文案专家。请根据下面主题生成短视频脚本。
 
-    const id = Date.now().toString();
+主题：${topic}
+风格：${style || "热点分析"}
+语言：${language || "中文"}
+时长：${duration || "60秒"}
+平台：${platform || "通用短视频平台"}
 
-    const txtFile = path.join(OUTPUT_DIR, `${id}.txt`);
-    const srtFile = path.join(OUTPUT_DIR, `${id}.srt`);
-    const videoFile = path.join(OUTPUT_DIR, `${id}.mp4`);
+要求：
+1. 生成一个吸引人的标题
+2. 生成一个3秒开头钩子
+3. 生成完整口播脚本，适合短视频
+4. 生成8到12条短字幕，每条字幕不要太长
+5. 内容要通俗、直接、有节奏
+6. 如果涉及投资、币圈、交易，不要承诺收益，要提醒风险
 
-    fs.writeFileSync(txtFile, scriptText, "utf-8");
-    fs.writeFileSync(srtFile, srtText, "utf-8");
+请严格返回 JSON，不要加 Markdown，不要加代码块：
+{
+  "title": "标题",
+  "hook": "开头钩子",
+  "script": "完整口播脚本",
+  "subtitles": ["字幕1","字幕2","字幕3"]
+}
+`;
 
-    await createVideo(videoFile);
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    let jsonText = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch (e) {
+      data = {
+        title: `${topic}，普通人一定要看懂`,
+        hook: `很多人对${topic}只看表面，真正关键在底层逻辑。`,
+        script: text,
+        subtitles: splitToSubtitles(text)
+      };
+    }
+
+    if (!Array.isArray(data.subtitles) || data.subtitles.length === 0) {
+      data.subtitles = splitToSubtitles(data.script);
+    }
 
     res.json({
-      ok: true,
-      provider: AI_PROVIDER,
-      model: getModel(),
-      result: scriptText,
-      videoUrl: `/outputs/${id}.mp4`,
-      txtUrl: `/outputs/${id}.txt`,
-      srtUrl: `/outputs/${id}.srt`
+      mode: "gemini",
+      title: data.title || `${topic}短视频`,
+      hook: data.hook || "",
+      script: data.script || "",
+      subtitles: data.subtitles.slice(0, 18)
     });
-
-  } catch (error) {
-    console.error("生成失败：", error);
-
-    res.status(500).json({
-      ok: false,
-      error: error.message || "服务器错误"
+  } catch (err) {
+    console.error("generate-script error:", err);
+    const { topic, style, duration } = req.body || {};
+    const data = fallbackScript(topic || "短视频主题", style, duration);
+    res.json({
+      mode: "error-fallback",
+      message: "Gemini 调用失败，已使用本地备用文案。",
+      ...data
     });
   }
 });
 
-async function generateScript({ topic, style, language, duration, platform }) {
-  const client = getAIClient();
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-  if (!client) {
-    return createDemoResult(topic, style, language, duration, platform);
-  }
-
-  const prompt = `
-你是一个专业短视频编导、爆款文案策划和剪辑导演。
-
-请根据下面信息生成短视频内容：
-
-主题：${topic}
-视频风格：${style || "爆款口播"}
-语言：${language || "中文"}
-视频时长：${duration || "60秒"}
-发布平台：${platform || "TikTok / YouTube Shorts / Reels / 抖音 / 快手"}
-
-请严格按照以下结构输出：
-
-【爆款标题】
-给出5个标题。
-
-【视频开头3秒钩子】
-一句强吸引注意力的话。
-
-【完整口播脚本】
-只写适合直接朗读的口播内容。
-语言要直接、有节奏、通俗。
-
-【分镜脚本】
-至少5个镜头。
-每个镜头包含：
-画面内容：
-字幕：
-旁白：
-素材建议：
-
-【字幕文件】
-按短句输出，每句不要太长。
-
-【发布文案】
-适合平台发布，带话题标签。
-如果是币圈、金融、投资相关内容，必须加入风险提示。
-
-【封面文案】
-给出3个封面大字标题。
-
-【剪辑建议】
-给出背景、音乐、字幕、节奏建议。
-
-要求：
-1. 不要承诺稳赚、暴富、100%收益。
-2. 不要编造真实新闻数据。
-3. 如果是币圈或金融内容，只做分析和风险提醒。
-4. 内容要像能直接发布的短视频脚本。
-`;
-
-  const completion = await client.chat.completions.create({
-    model: getModel(),
-    messages: [
-      {
-        role: "system",
-        content: "你是专业短视频内容工厂助手。"
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    temperature: 0.8,
-    max_tokens: 2500
-  });
-
-  return completion.choices?.[0]?.message?.content || createDemoResult(topic);
-}
-
-function extractVoiceScript(fullText) {
-  const match = fullText.match(/【完整口播脚本】([\s\S]*?)(【分镜脚本】|【字幕文件】|$)/);
-
-  let text = match ? match[1].trim() : fullText;
-
-  text = text
-    .replace(/【.*?】/g, "")
-    .replace(/镜头\d+[:：]/g, "")
-    .replace(/画面内容[:：]/g, "")
-    .replace(/字幕[:：]/g, "")
-    .replace(/旁白[:：]/g, "")
-    .replace(/素材建议[:：]/g, "")
-    .replace(/#\S+/g, "")
-    .replace(/\r/g, "")
-    .trim();
-
-  if (text.length > 500) {
-    text = text.slice(0, 500);
-  }
-
-  return text || "这是 AI短视频工厂 自动生成的视频内容。";
-}
-
-function createSrtFromText(text) {
-  const sentences = text
-    .replace(/\n+/g, "。")
-    .split(/[。！？!?]/)
-    .map(s => s.trim())
-    .filter(Boolean)
-    .slice(0, 20);
-
-  let srt = "";
-  let start = 0;
-
-  sentences.forEach((sentence, index) => {
-    const dur = Math.max(3, Math.min(6, Math.ceil(sentence.length / 6)));
-    const end = start + dur;
-
-    srt += `${index + 1}\n`;
-    srt += `${formatTime(start)} --> ${formatTime(end)}\n`;
-    srt += `${sentence}\n\n`;
-
-    start = end;
-  });
-
-  return srt;
-}
-
-function formatTime(sec) {
-  const h = String(Math.floor(sec / 3600)).padStart(2, "0");
-  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
-  const s = String(sec % 60).padStart(2, "0");
-  return `${h}:${m}:${s},000`;
-}
-
-function createVideo(videoFile) {
-  return new Promise((resolve, reject) => {
-    ffmpeg()
-      .input("color=c=0f172a:s=720x1280:r=30:d=18")
-      .inputFormat("lavfi")
-      .outputOptions([
-        "-c:v libx264",
-        "-pix_fmt yuv420p",
-        "-movflags +faststart"
-      ])
-      .save(videoFile)
-      .on("end", () => resolve())
-      .on("error", err => reject(err));
-  });
-}
-
-function createDemoResult(topic, style, language, duration, platform) {
-  return `
-【当前模式】
-Demo 演示模式：当前没有配置可用 AI API Key，但系统会继续生成基础 MP4 视频。
-
-【爆款标题】
-1. ${topic}，普通人现在还能不能做？
-2. 别再盲目跟风了，${topic}真正的关键在这里
-3. 新手做${topic}，一定要先看这几点
-4. ${topic}为什么突然被很多人关注？
-5. 3分钟看懂${topic}的底层逻辑
-
-【视频开头3秒钩子】
-很多人做${topic}，一开始方向就错了。
-
-【完整口播脚本】
-今天讲一个非常现实的话题：${topic}。
-
-很多人看到别人做起来了，就马上跟着冲进去。但真正能做起来的人，往往不是最着急的人，而是先把路径想清楚的人。
-
-第一步，不是马上投入大量资金，而是先验证需求。
-
-第二步，不是盲目模仿别人，而是找到适合自己的切入口。
-
-第三步，不是追求一夜成功，而是先做一个最小可用版本。
-
-如果你是新手，建议先从简单版本开始。能跑通，能展示，能收集反馈，再慢慢升级。
-
-记住一句话：先跑通闭环，再谈放大。
-
-【分镜脚本】
-镜头1：
-画面内容：手机界面、热门短视频、数据增长画面快速切换。
-字幕：很多人一开始方向就错了
-旁白：很多人做${topic}，一开始方向就错了。
-素材建议：手机录屏、短视频平台截图。
-
-镜头2：
-画面内容：手机输入主题，系统自动生成脚本和文案。
-字幕：先做最小可用版本
-旁白：真正正确的方式，是先做一个能跑通的简单版本。
-素材建议：AI工具页面、输入框、生成结果画面。
-
-镜头3：
-画面内容：短视频发布页面、评论区、数据反馈。
-字幕：跑通闭环，再放大
-旁白：先验证，再优化，最后才是批量放大。
-素材建议：发布界面、评论区、点赞数据。
-
-【字幕文件】
-很多人做${topic}，一开始方向就错了。
-不是马上投钱。
-不是盲目模仿。
-而是先做一个最小可用版本。
-能跑通，能展示，能收集反馈。
-再慢慢升级。
-先跑通闭环，再谈放大。
-
-【发布文案】
-新手做${topic}，不要一上来就追求复杂系统。先做简单版，跑通流程，再逐步升级。
-#AI工具 #短视频创业 #内容工厂 #副业项目 #自动化
-
-【封面文案】
-1. ${topic}新手必看
-2. 先别急着投钱
-3. 跑通闭环最重要
-
-【剪辑建议】
-竖屏9:16，深色背景，大字幕，高节奏，前3秒制造冲突感。
-`;
-}
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`AI短视频工厂 V1.5.2 已启动：http://0.0.0.0:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`AI Video Factory V1.6 running on port ${PORT}`);
 });
