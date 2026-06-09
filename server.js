@@ -7,16 +7,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 function fallbackScript(topic, style, duration) {
   return {
     title: `${topic}，普通人一定要看懂`,
-    hook: `很多人看到${topic}，第一反应就是跟风，但真正关键的点不是涨跌，而是逻辑。`,
+    hook: `很多人看到${topic}，第一反应就是跟风，但真正关键不是情绪，而是逻辑。`,
     script:
       `今天讲一个非常现实的话题：${topic}。\n\n` +
       `很多人一看到市场波动，就马上冲进去，结果往往不是赚钱，而是被情绪带着走。\n\n` +
@@ -59,12 +59,43 @@ function splitToSubtitles(text) {
   return result.slice(0, 18);
 }
 
+function splitTtsText(text) {
+  const raw = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/\n+/g, "。")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const pieces = raw
+    .split(/。|！|？|；|;/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  let current = "";
+
+  for (const p of pieces) {
+    const sentence = p + "。";
+    if ((current + sentence).length > 180) {
+      if (current) chunks.push(current);
+      current = sentence;
+    } else {
+      current += sentence;
+    }
+  }
+
+  if (current) chunks.push(current);
+
+  return chunks.slice(0, 12);
+}
+
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
-    version: "1.6.0",
+    version: "1.7.0",
     hasGoogleKey: Boolean(GOOGLE_API_KEY),
-    model: GEMINI_MODEL
+    model: GEMINI_MODEL,
+    tts: "google-translate-tts-fallback"
   });
 });
 
@@ -100,7 +131,7 @@ app.post("/api/generate-script", async (req, res) => {
 要求：
 1. 生成一个吸引人的标题
 2. 生成一个3秒开头钩子
-3. 生成完整口播脚本，适合短视频
+3. 生成完整口播脚本，适合短视频配音朗读
 4. 生成8到12条短字幕，每条字幕不要太长
 5. 内容要通俗、直接、有节奏
 6. 如果涉及投资、币圈、交易，不要承诺收益，要提醒风险
@@ -157,10 +188,68 @@ app.post("/api/generate-script", async (req, res) => {
   }
 });
 
+app.post("/api/tts", async (req, res) => {
+  try {
+    const { text, lang } = req.body || {};
+
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: "缺少配音文本" });
+    }
+
+    const chunks = splitTtsText(text);
+    const tl = lang === "en" ? "en-US" : "zh-CN";
+
+    const audioChunks = [];
+
+    for (const chunk of chunks) {
+      const url =
+        "https://translate.google.com/translate_tts" +
+        "?ie=UTF-8" +
+        "&client=tw-ob" +
+        `&tl=${encodeURIComponent(tl)}` +
+        `&q=${encodeURIComponent(chunk)}`;
+
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+          "Referer": "https://translate.google.com/"
+        }
+      });
+
+      if (!r.ok) {
+        throw new Error("TTS 请求失败：" + r.status);
+      }
+
+      const ab = await r.arrayBuffer();
+      const base64 = Buffer.from(ab).toString("base64");
+
+      audioChunks.push({
+        text: chunk,
+        mime: "audio/mpeg",
+        base64
+      });
+    }
+
+    res.json({
+      ok: true,
+      mode: "tts",
+      chunks: audioChunks
+    });
+  } catch (err) {
+    console.error("tts error:", err);
+    res.status(500).json({
+      ok: false,
+      error: "配音生成失败",
+      detail: err.message
+    });
+  }
+});
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`AI Video Factory V1.6 running on port ${PORT}`);
+  console.log(`AI Video Factory V1.7 running on port ${PORT}`);
 });
